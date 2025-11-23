@@ -11,7 +11,7 @@ cmd(
     filename: __filename,
   },
   async (
-    danuwa,
+    zanta,
     mek,
     m,
     {
@@ -44,7 +44,7 @@ Your youtube search results
 ${formattedResults}
    `;
 
-      await danuwa.sendMessage(
+      await zanta.sendMessage(
         from,
         {
           image: {
