@@ -18,7 +18,7 @@
     "ffmpeg": "^0.0.4",
     "ffmpeg-static": "^5.3.0",
     "file_size_url": "^1.0.6",
-    "fluent-ffmpeg": "^2.1.27",
+    "fluent-ffmpeg": "^2.1.2",
     "@xaviabot/fb-downloader": "^1.0.14",
     "@vreden/youtube_scraper": "^1.2.8",
     "yt-search": "^2.13.1",
