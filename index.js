@@ -27,8 +27,6 @@ const credsPath = path.join(__dirname, '/auth_info_baileys/creds.json');
 
 // --------------------------
 // Load all plugins from plugins folder
-// Note: Plugins using 'cmd' only need to be 'required' to register commands.
-// They should not be called in a loop here.
 // --------------------------
 const pluginFiles = fs.readdirSync('./plugins/').filter(f => f.endsWith('.js'));
 const plugins = pluginFiles.map(f => require(`./plugins/${f}`));
@@ -95,18 +93,15 @@ async function connectToWA() {
   });
 
   zanta.ev.on('creds.update', saveCreds);
+  
+  // 🚨 DEBUG: CHECK COMMANDS LOADED 🚨
+  console.log(`[STARTUP DEBUG] Loaded ${commands.length} commands from plugins.`);
+  // 🚨 DEBUG END 🚨
 
   // Messages listener
   zanta.ev.on('messages.upsert', async ({ messages }) => {
     for (const mek of messages) {
       if (!mek.message) continue;
-
-      // --------------------------
-      // Call all plugins - THIS SECTION WAS REMOVED
-      // --------------------------
-      // for (const plugin of plugins) {
-      //   await plugin(zanta, mek, config);
-      // }
 
       // Existing message handling
       mek.message = getContentType(mek.message) === 'ephemeralMessage' ? mek.message.ephemeralMessage.message : mek.message;
@@ -139,8 +134,16 @@ async function connectToWA() {
       const reply = (text) => zanta.sendMessage(from, { text }, { quoted: mek });
 
       if (isCmd) {
+        // 🚨 DEBUG: CHECK IF COMMAND IS DETECTED 🚨
+        console.log(`[CMD DEBUG] Command Detected: ${commandName} (Body: ${body})`);
+        // 🚨 DEBUG END 🚨
+
         const cmd = commands.find((c) => c.pattern === commandName || (c.alias && c.alias.includes(commandName)));
         if (cmd) {
+          // 🚨 DEBUG: CHECK IF COMMAND IS MATCHED 🚨
+          console.log(`[CMD DEBUG] Command Matched: ${cmd.pattern} (From file: ${cmd.filename})`);
+          // 🚨 DEBUG END 🚨
+          
           if (cmd.react) zanta.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
           try {
             cmd.function(zanta, mek, m, {
@@ -152,6 +155,10 @@ async function connectToWA() {
           } catch (e) {
             console.error("[PLUGIN ERROR]", e);
           }
+        } else {
+          // 🚨 DEBUG: COMMAND NOT FOUND 🚨
+          console.log(`[CMD DEBUG] Command Not Found in array: ${commandName}`);
+          // 🚨 DEBUG END 🚨
         }
       }
 
