@@ -34,7 +34,7 @@ cmd(
       for (const [cat, cmds] of Object.entries(categories)) {
         menuText += `\n📂 *${cat.toUpperCase()}*\n`;
         cmds.forEach(c => {
-          menuText += `- .${c.pattern} : ${c.desc}\n`;
+          menuText += `*◻ .${c.pattern} :* ${c.desc}\n`;
         });
       }
 
@@ -45,3 +45,4 @@ cmd(
     }
   }
 );
+
