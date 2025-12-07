@@ -1,12 +1,11 @@
 const {
-default: makeWASocket,
-useMultiFileAuthState,
-DisconnectReason,
-jidNormalizedUser,
-getContentType,
-fetchLatestBaileysVersion,
-Browsers,
-WAMessageStubType 
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  jidNormalizedUser,
+  getContentType,
+  fetchLatestBaileysVersion,
+  Browsers
 } = require('@whiskeysockets/baileys');
 
 const fs = require('fs');
@@ -17,9 +16,9 @@ const path = require('path');
 const qrcode = require('qrcode-terminal');
 
 const config = require('./config');
-const { sms } = require('./lib/msg');
+const { sms, downloadMediaMessage } = require('./lib/msg');
 const {
-getBuffer, getGroupAdmins, getRandom, h2k, isUrl, Json, runtime, sleep, fetchJson
+  getBuffer, getGroupAdmins, getRandom, h2k, isUrl, Json, runtime, sleep, fetchJson
 } = require('./lib/functions');
 const { File } = require('megajs');
 const { commands, replyHandlers } = require('./command');
@@ -28,214 +27,159 @@ const app = express();
 const port = process.env.PORT || 8000;
 
 const prefix = '.';
-const ownerNumber = ['94743404814'];
-const authPath = path.join(__dirname, '/auth_info_baileys/');
-const credsPath = path.join(authPath, 'creds.json');
-
+const ownerNumber = ['94776121326'];
+const credsPath = path.join(__dirname, '/auth_info_baileys/creds.json');
 
 async function ensureSessionFile() {
-if (!fs.existsSync(credsPath)) {
-if (!config.SESSION_ID) {
-console.error('❌ SESSION_ID env variable is missing. Cannot restore session.');
-process.exit(1);
-}
+  if (!fs.existsSync(credsPath)) {
+    if (!config.SESSION_ID) {
+      console.error('❌ SESSION_ID env variable is missing. Cannot restore session.');
+      process.exit(1);
+    }
 
-console.log("🔄 creds.json not found. Downloading session from MEGA...");
+    console.log("🔄 creds.json not found. Downloading session from MEGA...");
 
-const sessdata = config.SESSION_ID;
+    const sessdata = config.SESSION_ID;
+    const filer = File.fromURL(`https://mega.nz/file/${sessdata}`);
 
-// MEGA download promise/async ක්‍රමයට වෙනස් කර ඇත (Non-blocking)
-try {
-const filer = File.fromURL(`https://mega.nz/file/${sessdata}`);
-const data = await new Promise((resolve, reject) => {
-filer.download((err, data) => {
-if (err) reject(err);
-resolve(data);
-});
-});
+    filer.download((err, data) => {
+      if (err) {
+        console.error("❌ Failed to download session file from MEGA:", err);
+        process.exit(1);
+      }
 
-fs.mkdirSync(authPath, { recursive: true });
-fs.writeFileSync(credsPath, data);
-console.log("✅ Session downloaded and saved. Connecting...");
-connectToWA();
-} catch (err) {
-console.error("❌ Failed to download/save session file from MEGA:", err);
-process.exit(1);
-}
-} else {
-connectToWA();
-}
+      fs.mkdirSync(path.join(__dirname, '/auth_info_baileys/'), { recursive: true });
+      fs.writeFileSync(credsPath, data);
+      console.log("✅ Session downloaded and saved. Restarting bot...");
+      setTimeout(() => {
+        connectToWA();
+      }, 2000);
+    });
+  } else {
+    setTimeout(() => {
+      connectToWA();
+    }, 1000);
+  }
 }
 
 async function connectToWA() {
-console.log("Connecting ZANTA-MD 🧬...");
-const { state, saveCreds } = await useMultiFileAuthState(authPath);
-const { version } = await fetchLatestBaileysVersion();
+  console.log("Connecting ZANTA-MD 🧬...");
+  const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, '/auth_info_baileys/'));
+  const { version } = await fetchLatestBaileysVersion();
 
-const zanta = makeWASocket({
-logger: P({ level: 'silent' }),
-printQRInTerminal: true, // 💡 QR Code Terminal එකේ Print කරන්න
-browser: Browsers.macOS("Firefox"),
-auth: state,
-version,
-syncFullHistory: true,
-markOnlineOnConnect: true,
-generateHighQualityLinkPreview: true,
-});
+  const zanta = makeWASocket({
+    logger: P({ level: 'silent' }),
+    printQRInTerminal: false,
+    browser: Browsers.macOS("Firefox"),
+    auth: state,
+    version,
+    syncFullHistory: true,
+    markOnlineOnConnect: true,
+    generateHighQualityLinkPreview: true,
+  });
 
-zanta.ev.on('connection.update', async (update) => {
-const { connection, lastDisconnect, qr } = update;
+  zanta.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === 'close') {
+      if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+        connectToWA();
+      }
+    } else if (connection === 'open') {
+      console.log('✅ ZANTA-MD connected to WhatsApp');
 
-if (qr) {
-console.log('🤖 Scan this QR code:');
-qrcode.generate(qr, { small: true });
-}
+      const up = `ZANTA-MD connected ✅\n\nPREFIX: ${prefix}`;
+      await zanta.sendMessage(ownerNumber[0] + "@s.whatsapp.net", {
+        image: { url: `https://github.com/ZANTA-MD/ZANTA-MD/blob/main/images/ZANTA-MD.png?raw=true` },
+        caption: up
+      });
 
-if (connection === 'close') {
-const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-console.log('Connection closed. Reconnect:', shouldReconnect);
-if (shouldReconnect) {
-connectToWA();
-} else {
-console.log('❌ Connection logged out. Please delete auth_info_baileys and restart.');
-}
-} else if (connection === 'open') {
-console.log('✅ ZANTA-MD connected to WhatsApp');
+      fs.readdirSync("./plugins/").forEach((plugin) => {
+        if (path.extname(plugin).toLowerCase() === ".js") {
+          require(`./plugins/${plugin}`);
+        }
+      });
+    }
+  });
 
-const up = `ZANTA-MD connected ✅\n\nPREFIX: ${prefix}`;
-await zanta.sendMessage(ownerNumber[0] + "@s.whatsapp.net", {
-image: { url: `https://github.com/Akashkavindu/ZANTA_MD/blob/main/images/ChatGPT%20Image%20Nov%2021,%202025,%2001_21_32%20AM.png?raw=true` },
-caption: up
-});
+  zanta.ev.on('creds.update', saveCreds);
 
-fs.readdirSync("./plugins/").forEach((plugin) => {
-if (path.extname(plugin).toLowerCase() === ".js") {
-try {
-require(`./plugins/${plugin}`);
-} catch (e) {
-console.error(`Error loading plugin ${plugin}:`, e);
-}
-}
-});
-}
-});
+  zanta.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      if (msg.messageStubType === 68) {
+        await zanta.sendMessageAck(msg.key);
+      }
+    }
 
-zanta.ev.on('creds.update', saveCreds);
+    const mek = messages[0];
+    if (!mek || !mek.message) return;
 
-zanta.ev.on('messages.upsert', async ({ messages }) => {
+    mek.message = getContentType(mek.message) === 'ephemeralMessage' ? mek.message.ephemeralMessage.message : mek.message;
+    if (mek.key.remoteJid === 'status@broadcast') return;
 
-// 💡 Fix: System Message Logic (mek.messageStubType එකක් තිබේ නම් Ignore කරන්න)
-const mek = messages[0];
+    const m = sms(zanta, mek);
+    const type = getContentType(mek.message);
+    const from = mek.key.remoteJid;
+    const body = type === 'conversation' ? mek.message.conversation : mek.message[type]?.text || mek.message[type]?.caption || '';
+    const isCmd = body.startsWith(prefix);
+    const commandName = isCmd ? body.slice(prefix.length).trim().split(" ")[0].toLowerCase() : '';
+    const args = body.trim().split(/ +/).slice(1);
+    const q = args.join(' ');
 
-if (mek.messageStubType) {
-console.log(`Ignoring System Message Stub Type: ${mek.messageStubType}`);
-return; 
-}
+    const sender = mek.key.fromMe ? zanta.user.id : (mek.key.participant || mek.key.remoteJid);
+    const senderNumber = sender.split('@')[0];
+    const isGroup = from.endsWith('@g.us');
+    const botNumber = zanta.user.id.split(':')[0];
+    const pushname = mek.pushName || 'Sin Nombre';
+    const isMe = botNumber.includes(senderNumber);
+    const isOwner = ownerNumber.includes(senderNumber) || isMe;
+    const botNumber2 = await jidNormalizedUser(zanta.user.id);
 
-if (!mek || !mek.message) return;
+    const groupMetadata = isGroup ? await zanta.groupMetadata(from).catch(() => {}) : '';
+    const groupName = isGroup ? groupMetadata.subject : '';
+    const participants = isGroup ? groupMetadata.participants : '';
+    const groupAdmins = isGroup ? await getGroupAdmins(participants) : '';
+    const isBotAdmins = isGroup ? groupAdmins.includes(botNumber2) : false;
+    const isAdmins = isGroup ? groupAdmins.includes(sender) : false;
 
-// Ephemeral Message Handling
-mek.message = getContentType(mek.message) === 'ephemeralMessage' ? mek.message.ephemeralMessage.message : mek.message;
-if (mek.key.remoteJid === 'status@broadcast') return;
+    const reply = (text) => zanta.sendMessage(from, { text }, { quoted: mek });
 
-const m = sms(zanta, mek); // Simplified message object
-const type = getContentType(mek.message);
-const from = mek.key.remoteJid;
-const body = type === 'conversation' ? mek.message.conversation : mek.message[type]?.text || mek.message[type]?.caption || '';
-const isCmd = body.startsWith(prefix);
+    if (isCmd) {
+      const cmd = commands.find((c) => c.pattern === commandName || (c.alias && c.alias.includes(commandName)));
+      if (cmd) {
+        if (cmd.react) zanta.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
+        try {
+          cmd.function(zanta, mek, m, {
+            from, quoted: mek, body, isCmd, command: commandName, args, q,
+            isGroup, sender, senderNumber, botNumber2, botNumber, pushname,
+            isMe, isOwner, groupMetadata, groupName, participants, groupAdmins,
+            isBotAdmins, isAdmins, reply,
+          });
+        } catch (e) {
+          console.error("[PLUGIN ERROR]", e);
+        }
+      }
+    }
 
-// 💡 Debug Log: Command Detection Check
-console.log(`[DEBUG] Prefix: ${prefix}, Message Body (Start): ${body.slice(0, 30)}, Is Command: ${isCmd}`);
-
-const commandName = isCmd ? body.slice(prefix.length).trim().split(" ")[0].toLowerCase() : '';
-const args = body.trim().split(/ +/).slice(1);
-const q = args.join(' ');
-
-const sender = mek.key.fromMe ? zanta.user.id : (mek.key.participant || mek.key.remoteJid);
-const senderNumber = sender.split('@')[0];
-const isGroup = from.endsWith('@g.us');
-const botNumber = zanta.user.id.split(':')[0];
-const pushname = mek.pushName || 'Sin Nombre';
-const isMe = botNumber.includes(senderNumber);
-
-// Owner Check: ownerNumber Array එකේ ඇති අංක senderNumber සමඟ සැසඳීම
-const isOwner = ownerNumber.includes(senderNumber) || isMe;
-
-const botNumber2 = await jidNormalizedUser(zanta.user.id);
-
-// 💡 Fix: Group Metadata Retrieval (Error Handling & Direct Admin Check)
-let groupMetadata = null;
-let participants = [];
-let groupAdmins = [];
-let isBotAdmins = false; // 💡 මෙහිදී අගය වෙනස් කරයි
-let isAdmins = false;
-let groupName = '';
-
-if (isGroup) {
-groupMetadata = await zanta.groupMetadata(from).catch((e) => {
-console.error("Error fetching group metadata:", e.message);
-return null; 
-});
-
-if (groupMetadata) {
-groupName = groupMetadata.subject;
-participants = groupMetadata.participants;
-groupAdmins = getGroupAdmins(participants); 
-
-// 🚀 ALTERNATIVE BOT ADMIN CHECK (ප්‍රධාන වෙනස මෙන්න)
-// Participants List එකේ Bot ගේ JID එකට අදාළ object එක සොයා Admin property එක පරීක්ෂා කරයි.
-const botParticipant = participants.find(p => p.id === botNumber2);
-isBotAdmins = botParticipant?.admin !== null && botParticipant?.admin !== undefined;
-
-// Sender Admin Check
-isAdmins = groupAdmins.includes(sender);
-}
-}
-
-const reply = (text) => zanta.sendMessage(from, { text }, { quoted: mek });
-const quotedMessage = m.quoted; // m object එකේ quoted message එක
-const mentionedJid = mek.message.extendedTextMessage?.contextInfo?.mentionedJid || []; 
-
-if (isCmd) {
-console.log(`[CMD DETECTED] Name: ${commandName}, Sender: ${pushname}, Group: ${isGroup ? 'Yes' : 'No'}`);
-
-const cmd = commands.find((c) => c.pattern === commandName || (c.alias && c.alias.includes(commandName)));
-if (cmd) {
-if (cmd.react) zanta.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
-try {
-cmd.function(zanta, mek, m, {
-from, quoted: quotedMessage, mentionedJid, body, isCmd, command: commandName, args, q,
-isGroup, sender, senderNumber, botNumber2, botNumber, pushname,
-isMe, isOwner, groupMetadata, groupName, participants, groupAdmins,
-isBotAdmins, isAdmins, reply,
-});
-} catch (e) {
-console.error("[PLUGIN EXECUTION ERROR]", e);
-reply(`❌ Command එක ක්‍රියාත්මක කිරීමේදී දෝෂයක් ඇතිවිය: ${e.message || 'Unknown Error'}`);
-}
-}
-}
-
-const replyText = body;
-for (const handler of replyHandlers) {
-if (handler.filter(replyText, { sender, message: mek })) {
-try {
-await handler.function(zanta, mek, m, {
-from, quoted: quotedMessage, body: replyText, sender, reply,
-});
-break;
-} catch (e) {
-console.log("Reply handler error:", e);
-}
-}
-}
-});
+    const replyText = body;
+    for (const handler of replyHandlers) {
+      if (handler.filter(replyText, { sender, message: mek })) {
+        try {
+          await handler.function(zanta, mek, m, {
+            from, quoted: mek, body: replyText, sender, reply,
+          });
+          break;
+        } catch (e) {
+          console.log("Reply handler error:", e);
+        }
+      }
+    }
+  });
 }
 
 ensureSessionFile();
 
 app.get("/", (req, res) => {
-res.send("Hey, ZANTA-MD started✅");
+  res.send("Hey, ZANTA-MD started✅");
 });
 
 app.listen(port, () => console.log(`Server listening on http://localhost:${port}`));
