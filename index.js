@@ -38,6 +38,9 @@ const prefix = ".";
 const ownerNumber = ["94743404814"];
 const credsPath = path.join(__dirname, "/auth_info_baileys/creds.json");
 
+// 💾 Memory-Based Message Store (ගෝලීයව නිර්වචනය කර ඇත)
+const messagesStore = {}; 
+
 async function ensureSessionFile() {
     if (!fs.existsSync(credsPath)) {
         if (!config.SESSION_ID) {
@@ -95,12 +98,8 @@ async function connectToWA() {
         syncFullHistory: true,
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: true,
-        // Antidelete සඳහා Message Cache Map එකක්
         messages: new Map(),
     });
-
-    // Antidelete සඳහා Message Cache Map එකක් ආරම්භ කරයි
-    danuwa.messages = new Map();
 
     danuwa.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect } = update;
@@ -122,12 +121,11 @@ async function connectToWA() {
                 caption: up,
             });
 
-            // ✅ නිවැරදි කරන ලද PLUGIN LOADER
+            // ✅ PLUGIN LOADER
             fs.readdirSync("./plugins/").forEach((plugin) => {
                 if (path.extname(plugin).toLowerCase() === ".js") {
                     try {
                         const pluginModule = require(`./plugins/${plugin}`);
-                        // Antidelete වැනි Event-based Plugins සඳහා Bot Client Object එක යවන්න
                         if (typeof pluginModule === "function") {
                             pluginModule(danuwa);
                             console.log(
@@ -151,6 +149,70 @@ async function connectToWA() {
 
     danuwa.ev.on("creds.update", saveCreds);
 
+    // ----------------------------------------------------------------------
+    // 🗑️ ANTI-DELETE DETECTION EVENT (වඩාත් දැඩි ලෙස Debug කිරීමට)
+    // ----------------------------------------------------------------------
+    danuwa.ev.on("messages.delete", async (deletedMessage) => {
+
+        // 🚨 DEBUG LINE 3: Delete Event එක ලැබුණු වහාම පෙන්වයි.
+        console.log(`\n\n=================================================`);
+        console.log(`[DELETE DETECTED] Processing ID: ${deletedMessage.key.id}`);
+        console.log(`[STORE STATUS] Total messages in store: ${Object.keys(messagesStore).length}`);
+        console.log(`=================================================\n`);
+
+        const { remoteJid, fromMe } = deletedMessage.key;
+
+        // Delete කළේ Bot එකම නම් නොසලකා හරින්න
+        if (fromMe) return;
+
+        // Message ID එක මගින් මුල් පණිවිඩය ගෝලීය Store එකෙන් ලබා ගැනීම
+        const storedMessage = messagesStore[deletedMessage.key.id];
+
+        if (storedMessage && storedMessage.message) {
+
+            // Content Type එක හඳුනාගැනීම
+            let messageType = getContentType(storedMessage.message);
+            let deletedContent = 'මෙහි අන්තර්ගතය සොයාගත නොහැක (Media/Sticker).'; 
+
+            if (messageType === 'conversation') {
+                deletedContent = storedMessage.message.conversation;
+            } else if (messageType === 'extendedTextMessage') {
+                deletedContent = storedMessage.message.extendedTextMessage.text;
+            } else if (messageType === 'imageMessage') {
+                deletedContent = storedMessage.message.imageMessage.caption || "Image Message";
+            } else if (messageType === 'videoMessage') {
+                 deletedContent = storedMessage.message.videoMessage.caption || "Video Message";
+            }
+
+            const senderName = storedMessage.pushName || remoteJid;
+
+            // --- ප්‍රතිචාර පණිවිඩය සකස් කිරීම ---
+            const replyText = 
+                `🗑️ **MESSAGE DELETED (Anti-Delete)**\n` +
+                `*යවන්නා:* ${senderName}\n` +
+                `*වර්ගය:* ${messageType}\n` +
+                `*අන්තර්ගතය:* \n\`\`\`${deletedContent}\`\`\``;
+
+            await danuwa.sendMessage(
+                remoteJid, 
+                { text: replyText }, 
+                { quoted: storedMessage } // මුල් පණිවිඩයට Reply කර යැවීම
+            );
+
+            // 🚨 DEBUG LINE 4: Anti-Delete සාර්ථක වූ බව
+            console.log(`[SUCCESS] Anti-Delete activated for ${deletedMessage.key.id.slice(0, 10)}`);
+
+            // Memory පිරිසිදු කිරීම
+            delete messagesStore[deletedMessage.key.id];
+        } else {
+             // 🚨 DEBUG LINE 5: Store එකේ පණිවිඩය නැති බව
+             console.log(`[FAIL] Message ID ${deletedMessage.key.id.slice(0, 10)} not found in store! (Data lost or not cached)`);
+        }
+    });
+
+    // ----------------------------------------------------------------------
+    // 📥 INCOMING MESSAGE EVENT (Cache Logic ඇතුළත්)
+    // ----------------------------------------------------------------------
     danuwa.ev.on("messages.upsert", async ({ messages }) => {
         for (const msg of messages) {
             if (msg.messageStubType === 68) {
@@ -161,8 +223,16 @@ async function connectToWA() {
         const mek = messages[0];
         if (!mek || !mek.message) return;
 
-        // ✅ Antidelete සඳහා Message Cache කිරීම
-        danuwa.messages.set(mek.key.id, mek);
+        // 💡 1. Incoming Messages Store: Memory එකේ ගබඩා කිරීම
+        // Anti-Delete සඳහා ගෝලීය messagesStore වෙත එකතු කිරීම
+        if (mek.key.id && !mek.key.fromMe) {
+            messagesStore[mek.key.id] = mek;
+
+            // 🚨 DEBUG LINE 1: පණිවිඩය ගබඩා කළ බව
+            console.log(`[STORED] Message ID: ${mek.key.id.slice(0, 10)}... Sender: ${mek.pushName}`); 
+            // 🚨 DEBUG LINE 2: Memory Store හි වත්මන් ප්‍රමාණය
+            console.log(`[STORE SIZE] Current count: ${Object.keys(messagesStore).length}`); 
+        }
 
         mek.message =
             getContentType(mek.message) === "ephemeralMessage"
@@ -184,12 +254,12 @@ async function connectToWA() {
         const args = body.trim().split(/ +/).slice(1);
         const q = args.join(" ");
 
-        // ✅ නිවැරදි කරන ලද SENDER හඳුනාගැනීමේ Logic (Group Commands Fix)
+        // ✅ SENDER හඳුනාගැනීමේ Logic
         const sender = mek.key.fromMe
             ? danuwa.user.id
             : mek.key.participant
-              ? mek.key.participant
-              : mek.key.remoteJid;
+            ? mek.key.participant
+            : mek.key.remoteJid;
         const senderNumber = sender.split("@")[0];
         const isGroup = from.endsWith("@g.us");
         const botNumber = danuwa.user.id.split(":")[0];
