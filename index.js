@@ -25,7 +25,7 @@ h2k,
 isUrl,
 Json,
 runtime,
-sleep,
+sleep, 
 fetchJson,
 } = require("./lib/functions");
 const { File } = require("megajs");
@@ -35,12 +35,12 @@ const { commands, replyHandlers } = require("./command");
 const { lastMenuMessage } = require("./plugins/menu"); 
 
 const app = express();
-const port = process.env.PORT || 8000; // 8000 Port එක භාවිතා කරයි
+const port = process.env.PORT || 8000; 
 const prefix = ".";
 const ownerNumber = ["94743404814"];
 const credsPath = path.join(__dirname, "/auth_info_baileys/creds.json");
 
-// 🚨 FIX 1: UNCAUGHT EXCEPTION HANDLING (Crash වීම වැළැක්වීමට)
+// 🚨 FIX 1: UNCAUGHT EXCEPTION HANDLING
 process.on('uncaughtException', (err) => {
 console.error('⚠️ Uncaught Exception detected! The process will NOT exit. Error:', err);
 });
@@ -108,7 +108,7 @@ browser: Browsers.macOS("Firefox"),
 auth: state,
 version,
 syncFullHistory: true,
-markOnlineOnConnect: false, // 🛑 FIX 1: මෙය false ලෙස වෙනස් කර ඇත
+markOnlineOnConnect: config.ALWAYS_ONLINE, // 🌟 config value එක අනුව Start එකේදී Online තීරණය කරයි
 generateHighQualityLinkPreview: true,
 messages: new Map(),
 });
@@ -124,6 +124,16 @@ connectToWA();
 }
 } else if (connection === "open") {
 console.log("✅ ZANTA-MD connected to WhatsApp");
+
+// 🌟 FIX: ALWAYS_ONLINE: true නම්, නිරන්තරයෙන් Available Status එක යැවීම
+if (config.ALWAYS_ONLINE) {
+    // 30s Loop එකකින් Online Status එක maintain කරයි
+    setInterval(async () => {
+        await danuwa.sendPresenceUpdate('available');
+    }, 30000); 
+    console.log('✅ Continuous ONLINE presence loop started.');
+}
+
 
 const up = `ZANTA-MD connected ✅\n\nPREFIX: ${prefix}`;
 await danuwa.sendMessage(ownerNumber[0] + "@s.whatsapp.net", {
@@ -165,10 +175,6 @@ danuwa.ev.on("creds.update", saveCreds);
 // 🗑️ ANTI-DELETE DETECTION EVENT 
 // ----------------------------------------------------------------------
 danuwa.ev.on("messages.delete", async (deletedMessage) => {
-
-// ... (Anti-Delete Logic) ...
-// සම්පූර්ණ කේතයේ ඇති Anti-Delete Logic එක මෙහි එලෙසම තිබිය යුතුය.
-
 const { remoteJid, fromMe } = deletedMessage.key;
 if (fromMe) return;
 const storedMessage = messagesStore[deletedMessage.key.id];
@@ -204,7 +210,7 @@ delete messagesStore[deletedMessage.key.id];
 
 
 // ----------------------------------------------------------------------
-// 📥 INCOMING MESSAGE EVENT (DEBUG LOG එක සමඟ)
+// 📥 INCOMING MESSAGE EVENT 
 // ----------------------------------------------------------------------
 danuwa.ev.on("messages.upsert", async ({ messages }) => {
 for (const msg of messages) {
@@ -215,24 +221,26 @@ await danuwa.sendMessageAck(msg.key);
 
 const mek = messages[0];
 
-        // 🚩 FIX A: Normalization මුලින්ම සිදු කිරීම
+        // 🚩 JID Normalization
         const fromJidRaw = mek.key.remoteJid;
         const from = fromJidRaw ? jidNormalizedUser(fromJidRaw) : null;
         if (!from) return;
 
-// 🚨 FIX 4: ALWAYS ONLINE/PRESENCE UPDATE LOGIC (Composing/Available)
+// 🚨 PRESENCE UPDATE LOGIC: ALWAYS_ONLINE = true නම්, බලහත්කාරයෙන් Online පෙන්වයි.
 if (config.ALWAYS_ONLINE) {
-    // ALWAYS_ONLINE = true නම්, available ලෙස පෙන්වයි
+    // 🌟 ස්ථිර Online Fix එක: කෙටි ප්‍රමාදයන් සහිතව Available status කිහිපයක් යවයි.
     await danuwa.sendPresenceUpdate('available'); 
-} else if (!mek.key.fromMe) { 
+    await sleep(100); 
+    await danuwa.sendPresenceUpdate('available'); 
+    await sleep(100);
+    await danuwa.sendPresenceUpdate('available');
+} else if (!config.ALWAYS_ONLINE && !mek.key.fromMe) {
     // ALWAYS_ONLINE = false නම්, Message එකක් ආ විටම Typing පෙන්වයි
     await danuwa.sendPresenceUpdate('composing', from); 
 }
 // ---------------------------------------------------------------------
 
-
-// 🚨 FIX 2: INCOMING MESSAGE DEBUG LOG
-// Log එකේ නිවැරදි JID එක (Normalized) පෙන්වීමට 'from' විචල්‍යය භාවිතා කරයි.
+// 🚨 INCOMING MESSAGE DEBUG LOG
 console.log("-----------------------------------------");
 console.log(`📥 Incoming Message from (Normalized): ${from}`); 
 console.log(`Message Body: ${mek.message?.conversation || mek.message?.extendedTextMessage?.text || 'Non-Text Message'}`);
@@ -249,15 +257,10 @@ mek.message =
 getContentType(mek.message) === "ephemeralMessage"
 ? mek.message.ephemeralMessage.message
 : mek.message;
-if (from.endsWith("@broadcast")) return; // 'status@broadcast' වෙනුවට 'from' භාවිතා කරයි
-
-// (ඉතිරි Bot Logic එක මෙහි ඇත...)
+if (from.endsWith("@broadcast")) return; 
 
 const m = sms(danuwa, mek);
 const type = getContentType(mek.message);
-
-        // ⚠️ 'from' විචල්‍යය දැන් ඉහළින්ම නිර්වචනය කර ඇත.
-        // මෙම පේළිය ඉවත් කර ඇත: const from = jidNormalizedUser(mek.key.remoteJid);
 
 const body =
 type === "conversation"
@@ -293,13 +296,11 @@ const groupAdmins = isGroup ? await getGroupAdmins(participants) : "";
 const isBotAdmins = isGroup ? groupAdmins.includes(botNumber2) : false;
 const isAdmins = isGroup ? groupAdmins.includes(sender) : false;
 
-// 🚨 FIX: reply function එකේ JID Normalization දැන් අවශ්‍ය නැත,
-// මන්ද 'from' විචල්‍යය දැනටමත් normalize කර ඇති බැවිනි.
 const reply = (text) => 
 danuwa.sendMessage(from, { text }, { quoted: mek });
 
 // ------------------------------------------------------------------
-// 🚨 FIX 3: REPLY-BASED COMMAND EXECUTION LOGIC එක (Menu Reply Handling)
+// REPLY-BASED COMMAND EXECUTION LOGIC එක (Menu Reply Handling)
 // ------------------------------------------------------------------
 const isMenuReply = (m.quoted && lastMenuMessage && lastMenuMessage.get(from) === m.quoted.id);
 let shouldExecuteMenu = false;
@@ -377,9 +378,10 @@ console.log("Reply handler error:", e);
 }
 }
 
-// 🛑 FIX 2: Command එක Process කළ පසු Paused තත්ත්වයට මාරු කිරීම
+// 🛑 ALWAYS_ONLINE = false නම් පමණක් Paused තත්ත්වයට මාරු කිරීම
 if (!config.ALWAYS_ONLINE) {
-    // Reply එක යැවීමෙන් පසු Paused තත්ත්වයට යවයි.
+    // 200ms ප්‍රමාදයක් ලබා දී Paused තත්ත්වයට යවයි.
+    await sleep(200); 
     await danuwa.sendPresenceUpdate('paused', from);
 }
 });
