@@ -22,7 +22,5 @@ SESSION_ID: process.env.SESSION_ID || "5NFmGRKZ#-Q5gN23jhxHr8Gk1Xwt8b8MmubFQlnU8
 ALIVE_IMG: process.env.ALIVE_IMG || "https://github.com/Akashkavindu/ZANTA_MD/blob/main/images/alive.jpg?raw=true",
 ALIVE_MSG: process.env.ALIVE_MSG || FINAL_ALIVE_MSG, 
 BOT_OWNER: OWNER_NUMBER, 
-BOT_NAME: DEFAULT_BOT_NAME,
-AUTO_STATUS_REACT: (process.env.AUTO_STATUS_REACT || "true") === "true", //true or false
-ALWAYS_ONLINE: (process.env.ALWAYS_ONLINE || "true") === "true" // 'true' or 'false'
+BOT_NAME: DEFAULT_BOT_NAME
 };
