@@ -15,7 +15,6 @@ module.exports = {
 
     // 🖼️ Media Settings (Alive image & Menu)
     ALIVE_IMG: process.env.ALIVE_IMG || "https://github.com/Akashkavindu/ZANTA_MD/blob/main/images/alive-new.jpg?raw=true",
-    MENU_IMG: process.env.MENU_IMG || "https://github.com/Akashkavindu/ZANTA_MD/blob/main/images/menu-new.jpg?raw=true",
 
     // ⚙️ Dashboard / Database Defaults
     // මෙම අගයන් පළමු වතාවට Database එක සෑදීමේදී භාවිත වේ (Database & Dashboard Sync)
