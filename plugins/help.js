@@ -4,7 +4,7 @@ const config = require("../config");
 commands.push({
     pattern: "help",
     alias: ["bothelp", "info", "උදව්"],
-    category: "settings",
+    category: "setting",
     react: "❓",
     desc: "බොට් භාවිතා කරන ආකාරය සහ සංවර්ධක විස්තර දැනගැනීමට.",
     function: async (zanta, mek, m, { from, reply, prefix }) => {
