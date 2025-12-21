@@ -1,6 +1,5 @@
+const gis = require('g-i-s');
 const { cmd } = require("../command");
-const axios = require('axios');
-const cheerio = require('cheerio');
 
 cmd({
     pattern: "jid",
@@ -38,8 +37,8 @@ cmd({
 });
 
 cmd({
-    pattern: "speed",
-    alias: ["system", "ms"],
+    pattern: "ping",
+    alias: ["speed", "ms"],
     react: "⚡",
     desc: "Check bot's response speed.",
     category: "main",
@@ -47,10 +46,10 @@ cmd({
 }, async (zanta, mek, m, { from, reply }) => {
     try {
         const startTime = Date.now(); // මැසේජ් එක ලැබුණු වෙලාව
-        
+
         // මුලින්ම පුංචි මැසේජ් එකක් යවනවා
         const pinger = await zanta.sendMessage(from, { text: "🚀 *Checking Speed...*" }, { quoted: mek });
-        
+
         const endTime = Date.now(); // රිප්ලයි එක යැවූ වෙලාව
         const ping = endTime - startTime; // කාලය අතර වෙනස
 
@@ -69,66 +68,41 @@ cmd({
 });
 
 cmd({
-    pattern: "hiru",
-    alias: ["news", "hirunews"],
-    react: "📰",
-    desc: "Get the latest news from Hiru News.",
-    category: "search",
+    pattern: "img",
+    alias: ["image", "gimg"],
+    react: "🖼️",
+    desc: "Search and download images directly from Google using GIS.",
+    category: "download",
     filename: __filename,
-}, async (zanta, mek, m, { from, reply }) => {
+}, async (zanta, mek, m, { from, reply, q }) => {
     try {
-        const loading = await zanta.sendMessage(from, { text: "🗞️ *හිරු පුවත් ලබා ගනිමින් පවතී...*" }, { quoted: mek });
+        if (!q) return reply("❤️ *කරුණාකර පින්තූරයේ නම ලබා දෙන්න. (Ex: .img car)*");
 
-        // හිරු නිවුස් RSS feed එක හෝ සයිට් එකෙන් දත්ත ගනිමු
-        const response = await axios.get('https://www.hirunews.lk/rss/sinhala.xml');
-        const xmlData = response.data;
+        await reply(`🔍 *"${q}" පින්තූර සොයමින් පවතී...*`);
 
-        // Cheerio පාවිච්චි කරලා XML එක parse කරමු
-        const $ = cheerio.load(xmlData, { xmlMode: true });
-        let newsList = [];
-
-        // පුවත් 5ක් පමණක් තෝරා ගනිමු
-        $('item').each((i, el) => {
-            if (i < 5) {
-                const title = $(el).find('title').text();
-                const link = $(el).find('link').text();
-                const desc = $(el).find('description').text().split('<')[0]; // HTML tags අයින් කරන්න
-                const date = $(el).find('pubDate').text();
-
-                newsList.push({ title, link, desc, date });
+        // g-i-s පාවිච්චි කරලා Google පින්තූර සෙවීම
+        gis(q, async (error, results) => {
+            if (error) {
+                console.error(error);
+                return reply("❌ *පින්තූර සෙවීමේදී දෝෂයක් සිදු විය.*");
             }
-        });
 
-        if (newsList.length === 0) {
-            return await zanta.sendMessage(from, { text: "☹️ *පුවත් කිසිවක් හමු නොවීය.*", edit: loading.key });
-        }
-
-        let newsReport = `╭━─━─━─━─━─━─━─━╮\n┃ 📰 *HIRU NEWS UPDATES* ┃\n╰━─━─━─━─━─━─━─━╯\n\n`;
-
-        newsList.forEach((v, i) => {
-            newsReport += `📍 *${i + 1}. ${v.title}*\n\n📝 ${v.desc}\n📅 ${v.date}\n🔗 ${v.link}\n\n`;
-        });
-
-        newsReport += `> *© ZANTA-MD NEWS BOT*`;
-
-        // Loading මැසේජ් එක Edit කරලා News Report එක යවමු
-        await zanta.sendMessage(from, { 
-            text: newsReport, 
-            edit: loading.key,
-            contextInfo: {
-                externalAdReply: {
-                    title: "Hiru News - Latest",
-                    body: "Breaking News from Sri Lanka",
-                    thumbnailUrl: "https://www.hirunews.lk/images/logo.png",
-                    sourceUrl: "https://www.hirunews.lk",
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                }
+            if (!results || results.length === 0) {
+                return reply("❌ *පින්තූර සොයාගත නොහැකි විය.*");
             }
+
+            // ලැබෙන පින්තූර වලින් පළමු එක තෝරා ගැනීම
+            const imageUrl = results[0].url;
+            const botName = global.CURRENT_BOT_SETTINGS?.botName || "ZANTA-MD";
+
+            await zanta.sendMessage(from, {
+                image: { url: imageUrl },
+                caption: `*🖼️ IMAGE DOWNLOADER*\n\n🔍 *Query:* ${q}\n🚀 *Bot:* ${botName}\n\n> *© Powered by ZANTA-MD*`,
+            }, { quoted: mek });
         });
 
-    } catch (err) {
-        console.error(err);
-        reply("❌ *හිරු පුවත් සේවාව සමඟ සම්බන්ධ විය නොහැක. Codespace එකේ axios install කර ඇත්දැයි බලන්න.*");
+    } catch (e) {
+        console.error("GIS Error:", e);
+        reply(`❌ *Error:* ${e.message}`);
     }
 });
