@@ -7,11 +7,11 @@ function convertToBool(text, fault = 'true') {
 
 module.exports = {
     // 🔑 Essential Session & Owner Settings
-    SESSION_ID: process.env.SESSION_ID || "Enter your session id",
-    OWNER_NUMBER: process.env.OWNER_NUMBER || "94743404814",
+    SESSION_ID: process.env.SESSION_ID || "lN9WlDbT#NzSGSm8zJsEGOzmL31nBzvSpDrzG0Nxdh__4qXYC8d0",
+    OWNER_NUMBER: process.env.OWNER_NUMBER || "94742563284",
 
     // 🤖 Default Fallback Settings
-    DEFAULT_BOT_NAME: process.env.DEFAULT_BOT_NAME || "ZANTA-MD",
+    DEFAULT_BOT_NAME: process.env.DEFAULT_BOT_NAME || "𝐃𝐈𝐌𝐔𝐖𝐀-𝐌𝐃",
     DEFAULT_OWNER_NAME: process.env.DEFAULT_OWNER_NAME || "Akash nimsara",
     DEFAULT_PREFIX: process.env.DEFAULT_PREFIX || ".",
 
